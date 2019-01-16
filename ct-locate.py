@@ -3,9 +3,8 @@
 """
 .. module:: ct-locate.py
    :synopsis: Attempts to discover the physical location of a Chromecast
-              device by rebooting it, requesting a list of the nearby
-              Wi-Fi networks and sending their BSSIDs to the Google
-              Geolocation API.
+              device by requesting a list of the nearby Wi-Fi networks
+              and sending their BSSIDs to the Google Geolocation API.
 
 .. moduleauthor:: Rodrigo Laneth <rodrigo@rapidlight.io>
    :copyright: Copyright (c) 2018 Radialle (radialle.com)
@@ -19,7 +18,7 @@ import urllib.request as request
 
 from urllib.error import HTTPError, URLError
 
-SLEEP_BETWEEN_SCAN = 4
+SLEEP_AFTER_SCAN = 5
 REQUEST_TIMEOUT = 4
 
 def usage():
@@ -37,12 +36,10 @@ def get_scan_list():
     url = "http://{}:8008/setup/scan_results".format(host)
     return request.urlopen(url, timeout=REQUEST_TIMEOUT)
 
-# Reboots the Chromecast device.
-def post_reboot():
-    url = "http://{}:8008/setup/reboot".format(host)
-    headers = {"Content-Type": "application/json"}
-    data = json.dumps({"params": "now"}).encode("utf-8")
-    r = request.Request(url, data, headers=headers)
+# Requests a Wi-Fi network scan from the Chromecast device.
+def post_scan_wifi():
+    url = "http://{}:8008/setup/scan_wifi".format(host)
+    r = request.Request(url, "".encode("utf-8"))
     return request.urlopen(r, timeout=REQUEST_TIMEOUT)
 
 # Attempts to retrieve a location from a list of access points by using the
@@ -64,26 +61,13 @@ def main():
     host = sys.argv[1]
     api_key = read_api_key()
 
-    print("Rebooting target ...")
-    post_reboot()
+    print("Requesting Wi-Fi scan ...")
+    post_scan_wifi()
 
-    while True:
-        time.sleep(SLEEP_BETWEEN_SCAN)
-        print("Requesting Wi-Fi scan results ...")
-        try:
-            scan_list = json.loads( \
-                get_scan_list().read().decode("utf-8") \
-            )
-        except (HTTPError, URLError) as e:
-            # Errors are expected, since some requests might be sent while the
-            # Chromecast is still rebooting.
-            print(str(e))
-            continue
-        if (len(scan_list) > 1):
-            # If the Wi-Fi scan results contain more than one network, we may
-            # proceed to the next step.
-            break
-        print("Networks found: {}. Retrying.".format(len(scan_list)))
+    time.sleep(SLEEP_AFTER_SCAN)
+
+    print("Requesting Wi-Fi scan results ...")
+    scan_list = json.loads(get_scan_list().read().decode("utf-8"))
 
     # Create access point list for the Google Geolocation API.
     ap_list = []
